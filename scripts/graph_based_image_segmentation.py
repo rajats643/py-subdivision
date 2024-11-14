@@ -23,13 +23,10 @@ def get_adjacent_coords(x: int, y: int, image: np.ndarray) -> List[Tuple[int, in
             if x_out_of_bounds or y_out_of_bounds or same_element:
                 continue
             result.append((x + i, y + j))
-    # logger.debug(f"({x},{y}) -> {result}")
     return result
 
 
-# TODO: finish graph implementation
-# TODO: build graph with correct weights
-# TODO: calculate mst
+# TODO: calculate mst prims and kruskal
 # TODO: calculate cuts and regions
 # TODO: merge regions
 # TODO: segment images
@@ -42,12 +39,29 @@ def calculate_weights(x: int, y: int, image: np.ndarray) -> List[Tuple[int, int]
     adjacent_coords: List[Tuple[int, int]] = get_adjacent_coords(x, y, image)
     weights: List[Tuple[int, int]] = []
     for px, py in adjacent_coords:
-        # logger.debug(f"({px,py},{x,y}) -> {image[px][py]},{image[x][y]}")
         weight: int = abs(int(image[px][py]) - int(image[x][y]))
         endpoint: int = (image.shape[0] * px) + py
         weights.append((endpoint, weight))
-    # logger.debug(f"({x},{y}) -> {weights}")
     return weights
+
+
+class ImageComponent:
+
+    def __init__(self):
+        self.component: Dict[int, Set[Tuple[int, int]]] = defaultdict(set)
+
+    def _add_vertex(self, vertex: int) -> None:
+        if vertex not in self.component:
+            self.component[vertex] = set()
+
+    def _add_edge(self, vertex: int, endpoint: int, weight: int) -> None:
+        if vertex not in self.component:
+            self._add_vertex(vertex)
+        if endpoint not in self.component[vertex]:
+            self._add_vertex(endpoint)
+
+        if not (vertex, weight) in self.component[endpoint]:
+            self.component[vertex].add((endpoint, weight))
 
 
 class ImageGraph:
@@ -59,21 +73,21 @@ class ImageGraph:
             raise TypeError("image must be np.ndarray")
         if len(image.shape) != 2:
             raise TypeError("image must be single channel 2d array")
-        self.G: Dict[int, Set[Tuple[int, int]]] = defaultdict(set)
+        self.G: ImageComponent = ImageComponent()
         self._build_graph_from_image(image)
 
     def _add_vertex(self, vertex: int) -> None:
-        if vertex not in self.G:
-            self.G[vertex] = set()
+        if vertex not in self.G.component:
+            self.G.component[vertex] = set()
 
     def _add_edge(self, vertex: int, endpoint: int, weight: int) -> None:
-        if vertex not in self.G:
+        if vertex not in self.G.component:
             self._add_vertex(vertex)
-        if endpoint not in self.G[vertex]:
+        if endpoint not in self.G.component[vertex]:
             self._add_vertex(endpoint)
 
-        if not (vertex, weight) in self.G[endpoint]:
-            self.G[vertex].add((endpoint, weight))
+        if not (vertex, weight) in self.G.component[endpoint]:
+            self.G.component[vertex].add((endpoint, weight))
 
     def _build_graph_from_image(self, image: np.ndarray) -> None:
         """expecting single channel image"""
@@ -87,7 +101,7 @@ class ImageGraph:
 
     def __str__(self) -> str:
         result: str = ""
-        for vertex, edges in self.G.items():
+        for vertex, edges in self.G.component.items():
             result += f"{vertex}: {edges}\n"
         return result
 
@@ -122,7 +136,6 @@ def runtime_test(n: int = 5, sf: float = 0.1) -> None:
         result = perf_counter() - start
         logger.debug(f" init time: {result:.3f} seconds")
         total += result
-        del single, _
 
     logger.info(f"total init time: {total:.3f} seconds")
     logger.info(f"average init time: {(total/n):.3f} seconds")
@@ -141,5 +154,5 @@ if __name__ == "__main__":
     logger.info("setup logger")
 
     # operations
-    # runtime_test(n=4)
+    runtime_test(n=4, sf=0.1)
     logger.info("end of test")
