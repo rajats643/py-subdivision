@@ -47,21 +47,23 @@ def calculate_weights(x: int, y: int, image: np.ndarray) -> List[Tuple[int, int]
 
 class ImageComponent:
 
-    def __init__(self):
-        self.component: Dict[int, Set[Tuple[int, int]]] = defaultdict(set)
+    def __init__(self, image: np.ndarray):
+        if not isinstance(image, np.ndarray):
+            raise TypeError("image must be np.ndarray")
+        if len(image.shape) != 2:
+            raise TypeError("image must be single channel 2d array")
+        self.edges: Set[Tuple[int, int, int]] = set()
+        self.vertices: Set[int] = set()
 
     def _add_vertex(self, vertex: int) -> None:
-        if vertex not in self.component:
-            self.component[vertex] = set()
+        self.vertices.add(vertex)
 
     def _add_edge(self, vertex: int, endpoint: int, weight: int) -> None:
-        if vertex not in self.component:
-            self._add_vertex(vertex)
-        if endpoint not in self.component[vertex]:
-            self._add_vertex(endpoint)
+        if not ((endpoint, vertex, weight) in self.edges):
+            self.edges.add((vertex, endpoint, weight))
 
-        if not (vertex, weight) in self.component[endpoint]:
-            self.component[vertex].add((endpoint, weight))
+    def __str__(self) -> str:
+        return f"vertices: {len(self.vertices)}, edges: {len(self.edges)}"
 
 
 class ImageGraph:
@@ -127,6 +129,12 @@ def get_test_images(
 
 
 def runtime_test(n: int = 5, sf: float = 0.1) -> None:
+    """
+
+    :param n: number of images
+    :param sf: scaling factor for the images
+    :return: None
+    """
     total: float = 0.0
     logger.info(f"running init runtime test ({n})")
     for _ in range(n):
