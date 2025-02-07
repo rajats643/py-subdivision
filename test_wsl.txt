@@ -1,0 +1,2 @@
+idk why this opens in replace mode all the time
+I need to configure this vim
