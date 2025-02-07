@@ -1,3 +1,4 @@
 idk why this opens in replace mode all the time
 I need to configure this vim
 I have added more to see if it still works
+This is the third attempt with gcm
