@@ -24,32 +24,35 @@ import numpy as np
 # --------------------------- #
 
 
-class UnionFind:
-    """an implementation of the union-find data structure"""
+class Graph:
+    """an implementation of a graph, contains edges/weights stored as tuples"""
+
+    def __init__(self):
+        self.edges: list = []  # min heap by weight of edges
+        # contains edges: (weight, source_vertex, destination_vertex)
+
+        self.MST: list = []  # contains MST of this graph
+        self.internal_difference: float = -1  # maximum edge in MST
+
+    def build_mst(self):
+        pass
+
+    def build_graph(self):
+        pass
+
+    def find_internal_difference(self):
+        pass
+
+
+class Segmentation:
+    """a union find for graphs, each vertex is associated with a graph"""
 
     def __init__(self, n: int):
         self.parent = list(range(n))
         self.rank = [0] * n
 
-    def find(self, x: int) -> int:
-        if self.parent[x] != x:
-            self.parent[x] = self.find(self.parent[x])
-        return self.parent[x]
 
-    def union(self, x: int, y: int) -> None:
-        x_root = self.find(x)
-        y_root = self.find(y)
-
-        if x_root == y_root:
-            return
-
-        if self.rank[x_root] < self.rank[y_root]:
-            self.parent[x_root] = y_root
-        elif self.rank[y_root] < self.rank[x_root]:
-            self.parent[y_root] = x_root
-        else:
-            self.parent[y_root] = x_root
-            self.rank[x_root] += 1
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
 class Vertex:
