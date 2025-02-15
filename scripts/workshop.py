@@ -1,58 +1,45 @@
-import os
+import numpy as np
+from typing import List, Tuple, Callable
 
 
-class Graph:
-    """an implementation of a graph containing union-find methods for MST"""
+class FHSolver:
 
-    def __init__(self, vertices: int):
-        self.vertices: int = vertices
-        self.graph: list = []
-        self.parent: list = [i for i in range(vertices)]
-        self.rank: list = [0] * vertices
-        self.mst: list = []
-        self.internal_difference: float = -1
+    def __init__(self, h: int, w: int, edges: List[Tuple[int, int]] = None):
+        self.edges: List[Tuple[int, int, float]] = edges if edges is not None else []
+        self.h: int = h
+        self.w: int = w
+        self.uf_matrix: List[List[int]] = [
+            [(i * w) + j for j in range(w)] for i in range(h)
+        ]
+        self.id_matrix: List[List[int]] = [[0 for _ in range(w)] for _ in range(h)]
 
-    def add_edge(self, u: int, v: int, weight: float) -> None:
-        self.graph.append((u, v, weight))
+    def set_edges(self, edges: List[Tuple[int, int, float]]):
+        self.edges: List[Tuple[int, int, float]] = edges
 
-    def find(self, x: int) -> int:
-        if self.parent[x] != x:
-            self.parent[x] = self.find(self.parent[x])
+    def find(self, i: int, j: int) -> int:
+        parent: int = (i * self.w) + j
+        if self.uf_matrix[i][j] == parent:
+            return parent
 
-        return self.parent[x]
+        self.uf_matrix[i][j] = self.find(parent // 10, parent % 10)
+        return self.uf_matrix[i][j]
 
-    def union(self, x: int, y: int) -> None:
-        x_root: int = self.find(x)
-        y_root: int = self.find(y)
 
-        if x_root == y_root:
-            return
-
-        if self.rank[x_root] < self.rank[y_root]:
-            self.parent[x_root] = y_root
-        elif self.rank[y_root] < self.rank[x_root]:
-            self.parent[y_root] = x_root
-        else:
-            self.parent[y_root] = x_root
-            self.rank[x_root] += 1
-
-    def build_mst(self):
-        self.mst: list = []
-        edge_counter: int = 0
-        mst_counter: int = 0
-
-        self.graph = sorted(self.graph, key=lambda x: x[2])  # sort edges by weight
-        while mst_counter < self.vertices - 1:
-            u, v, w = self.graph[edge_counter]
-            edge_counter += 1
-            x: int = self.find(u)
-            y: int = self.find(v)
-            if x != y:
-                mst_counter += 1
-                self.mst.append((u, v, w))
-                self.union(x, y)
-        self.internal_difference = self.mst[-1][2]  # maximum weight in the MST
+def main():
+    x = [
+        (1, 2, 10),
+        (2, 3, 20),
+        (3, 9, 3),
+        (3, 4, 40),
+        (4, 1, 40),
+        (4, 5, 80),
+        (5, 9, 50),
+        (9, 2, 40),
+    ]
+    s = FHSolver(5, 5)
+    print(s.uf_matrix)
+    print(s.id_matrix)
 
 
 if __name__ == "__main__":
-    print(os.name)
+    main()
