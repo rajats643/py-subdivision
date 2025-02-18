@@ -80,7 +80,7 @@ def read_image(image_path: Path) -> np.ndarray:
         logger.debug(f"image shape: {image.shape}, {image.dtype}")
     except (FileNotFoundError, cv.error, Exception) as e:
         raise RuntimeError("failure during image read") from e
-    return image.astype(np.float32)
+    return image
 
 
 if __name__ == "__main__":

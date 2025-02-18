@@ -1,53 +1,61 @@
 import numpy as np
 from typing import List, Tuple, Callable
+import time
 
 
 class FHSolver:
 
-    def __init__(self, h: int, w: int, edges: List[Tuple[int, int]] = None):
-        self.edges: List[Tuple[int, int, float]] = edges if edges is not None else []
+    def __init__(self, h: int, w: int, k: int):
         self.h: int = h
         self.w: int = w
-        self.uf_matrix: List[List[int]] = [
-            [(i * w) + j for j in range(w)] for i in range(h)
-        ]
-        self.id_matrix: List[List[float]] = [[0 for _ in range(w)] for _ in range(h)]
-        self.rank: List[List[int]] = [[0 for _ in range(w)] for _ in range(h)]
+        self.k: int = k
+        self.parent: List[int] = [i for i in range(w * h)]
+        self.internal_difference: List[float] = [0 for _ in range(w * h)]
+        self.rank: List[int] = [1 for _ in range(w * h)]
 
-    def set_edges(self, edges: List[Tuple[int, int, float]]):
-        self.edges: List[Tuple[int, int, float]] = edges
+    def find(self, x: int) -> int:
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
 
-    def find(self, i: int, j: int) -> int:
-        parent: int = (i * self.w) + j
-        if self.uf_matrix[i][j] == parent:
-            return parent
+    def union(self, x: int, y: int, weight: float) -> None:
+        parent_x = self.find(x)
+        parent_y = self.find(y)
 
-        self.uf_matrix[i][j] = self.find(parent // 10, parent % 10)
-        return self.uf_matrix[i][j]
+        if parent_x == parent_y:
+            return (
+                None  # the edge between x,y forms a loop so we don't want to include it
+            )
 
-    def union(self, point_one: Tuple[int, int], point_two: Tuple[int, int]) -> None:
-        parent_one: int = self.find(point_one[0], point_one[1])
-        parent_two: int = self.find(point_two[0], point_two[1])
+        mint_x: float = self.internal_difference[parent_x]
+        mint_y: float = self.internal_difference[parent_y]
+        mint: float = min(
+            mint_x + (self.k / self.rank[parent_x]),
+            mint_y + (self.k / self.rank[parent_y]),
+        )
+        if mint < weight:
+            return None  # the edge doesn't meet the conditions of the FH predicate
 
-        if parent_one == parent_two:
-            return None  # the edge forms a loop, and we don't want to include it
-
-        one: Tuple[int, int] = parent_one // 10, parent_one % 10
-        two: Tuple[int, int] = parent_two // 10, parent_two % 10
-
-        if self.rank[one[0]][one[1]] < self.rank[two[0]][two[1]]:
-            self.uf_matrix[one[0]][one[1]] = parent_two
-        elif self.rank[one[0]][one[1]] > self.rank[two[0]][two[1]]:
-            self.uf_matrix[two[0]][two[1]] = parent_one
+        if self.rank[parent_x] < self.rank[parent_y]:
+            self.parent[parent_x] = parent_y
+        elif self.rank[parent_x] > self.rank[parent_y]:
+            self.parent[parent_y] = parent_x
         else:
-            self.uf_matrix[two[0]][two[1]] = parent_one
-            self.rank[two[0]][two[1]] += 1
+            self.parent[parent_y] = parent_x
+            self.rank[parent_x] += 1
 
         max_edge_weight: float = max(
-            self.id_matrix[one[0]][one[1]], self.id_matrix[two[0]][two[1]]
+            self.internal_difference[x], self.internal_difference[y], weight
         )
-        self.id_matrix[one[0]][one[1]] = max_edge_weight
-        self.id_matrix[two[0]][two[1]] = max_edge_weight
+        self.internal_difference[x] = max_edge_weight
+        self.internal_difference[y] = max_edge_weight
+
+    def __str__(self):
+        result: str = ""
+        result += f"Parent: {self.parent}\n"
+        result += f"Rank: {self.rank}\n"
+        result += f"Internal difference: {self.internal_difference}\n"
+        return result
 
 
 def main():
@@ -61,9 +69,15 @@ def main():
         (5, 9, 50),
         (9, 2, 40),
     ]
-    s = FHSolver(5, 5)
-    print(s.uf_matrix)
-    print(s.id_matrix)
+    x = sorted(x, key=lambda x: x[2])
+    s = FHSolver(3, 4, 10)
+    start = time.perf_counter()
+
+    print(s)
+    for edge in x:
+        s.union(*edge)
+    print(s)
+    print(f"Execution time: {(time.perf_counter() - start):.3f} seconds")
 
 
 if __name__ == "__main__":

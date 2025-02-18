@@ -10,6 +10,7 @@ from typing import Dict, Set, Tuple, List, Callable
 from random import choice, randint
 from time import perf_counter
 import heapq
+from workshop import FHSolver
 
 from numpy.ma.core import absolute
 
@@ -23,137 +24,14 @@ import numpy as np
 #   CLASSES     #
 # --------------------------- #
 
-
-class Graph:
-    """an implementation of a graph, contains edges/weights stored as tuples"""
-
-    def __init__(self):
-        self.edges: list = []  # min heap by weight of edges
-        # contains edges: (weight, source_vertex, destination_vertex)
-
-        self.MST: list = []  # contains MST of this graph
-        self.internal_difference: float = -1  # maximum edge in MST
-
-    def build_mst(self):
-        pass
-
-    def build_graph(self):
-        pass
-
-    def find_internal_difference(self):
-        pass
-
-
-class Segmentation:
-    """a union find for graphs, each vertex is associated with a graph"""
-
-    def __init__(self, n: int):
-        self.parent = list(range(n))
-        self.rank = [0] * n
-
-
-# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-
-class Vertex:
-    """a vertex class that contains the coordinates of a single vertex from the image"""
-
-    def __init__(self, x: int, y: int):
-        self.x: int = x
-        self.y: int = y
-
-    def __str__(self):
-        return f"x: {self.x}, y: {self.y}"
-
-    def __hash__(self):
-        return hash((self.x, self.y))
-
-
-class Edge:
-    """an edge class that contains two vertices that make an edge and its weight"""
-
-    def __init__(self, v1: Vertex, v2: Vertex):
-        self.v1: Vertex = v1
-        self.v2: Vertex = v2
-        self.weight: float = 0
-
-    def set_weight(
-        self,
-        image: np.ndarray,
-        weight_function: Callable[[Vertex, Vertex, np.ndarray], float],
-    ):
-        self.weight = weight_function(self.v1, self.v2, image)
-
-    def __lt__(self, other) -> bool:
-        return self.weight < other.weight
-
-    def __str__(self):
-        return f"v1: {self.v1} v2: {self.v2} weight: {self.weight}"
-
-    def __hash__(self):
-        return hash((self.v1, self.v2, self.weight))
-
-
-class Component:
-    """a component that defines an area of an image using its constituent edges"""
-
-    def __init__(self, edges: Set[Edge]):
-        self.edges: Set[Edge] = edges
-        self.sorted_edges: List[Edge] = []
-        self.mst: Set[Edge] = set()
-        self.mst_vertices: Set[Vertex] = set()
-
-    def __len__(self):
-        return len(self.edges)
-
-    def construct_mst(self):
-        """use Kruskal's algorithm to find MST"""
-        self.mst_vertices: Set[Vertex] = set()
-        self.mst: Set[Edge] = set()
-        self.sorted_edges = sorted(self.edges)
-        for edge in self.sorted_edges:
-            # check if edge forms a cycle
-            if edge.v1 in self.mst_vertices and edge.v2 in self.mst_vertices:
-                print("skip")
-            else:
-                self.mst.add(edge)
-                self.mst_vertices.add(edge.v1)
-                self.mst_vertices.add(edge.v2)
-
-    def edge_presence(self, edge: Edge) -> bool:
-        return edge in self.edges
-
-    def set_weights(
-        self,
-        image: np.ndarray,
-        weight_function: Callable[[Vertex, Vertex, np.ndarray], float],
-    ):
-        for edge in self.edges:
-            edge.set_weight(image, weight_function)
-
-
-"""  
-Sort all the edges in non-decreasing order of their weight.
-Pick the smallest edge. Check if it forms a cycle with the spanning tree formed so far. If the cycle is not formed, include this edge. Else, discard it.
-Repeat step#2 until there are (V-1) edges in the spanning tree.
-
-"""
 # --------------------------- #
 #   FUNCTIONS   #
 # --------------------------- #
 
 
-def merge_components(a: Component, b: Component) -> Component:
-    return Component(a.edges.union(b.edges))
-
-
 # --------------------------- #
 #   WEIGHT FUNCTIONS    #
 # --------------------------- #
-
-
-def absolute_intensity(v1: Vertex, v2: Vertex, image) -> float:
-    return abs(image[v1.x][v1.y] - image[v2.x][v2.y])
 
 
 # --------------------------- #
@@ -166,7 +44,8 @@ def get_test_image(
 ) -> Tuple[np.ndarray, np.ndarray]:
     # setup params
     base_path: Path = Path(os.path.dirname(os.path.dirname(__file__)))
-    test_images: list = ["building", "camera", "clothes", "island", "ski"]
+    # test_images: list = ["building", "camera", "clothes", "island", "ski"]
+    test_images: list = ["clothes"]
     test_image_name: str = choice(test_images)
     test_image_path: Path = base_path / "test_images" / f"{test_image_name}.jpg"
 
@@ -179,21 +58,6 @@ def get_test_image(
     single_channel: np.ndarray = np.array(image[:, :, channel])
     logger.info(f"fetching image: {test_image_name}  img: {image.shape}")
     return image, single_channel
-
-
-def get_list(n: int, image: np.ndarray) -> List[Edge]:
-    result = []
-    for _ in range(n):
-        v1 = Vertex(randint(0, n), randint(0, n))
-        v2 = Vertex(randint(0, n), randint(0, n))
-        edge = Edge(
-            v1,
-            v2,
-        )
-        edge.set_weight(image, absolute_intensity)
-        result.append(edge)
-
-    return result
 
 
 def get_adjacent_coords(x: int, y: int, image: np.ndarray) -> List[Tuple[int, int]]:
@@ -216,44 +80,56 @@ def get_adjacent_coords(x: int, y: int, image: np.ndarray) -> List[Tuple[int, in
     return result
 
 
-def image_to_component(image: np.ndarray) -> Component:
-    # image is a single channel
+def get_edges(image: np.ndarray) -> List[Tuple[int, int, float]]:
     h, w = image.shape
-    edges: Set[Edge] = set()
+    global_set = set()
+    result = []
 
     for i in range(h):
-        for j in range(1, w):
-            current_point: Vertex = Vertex(i, j)
-            previous_point: Vertex = Vertex(i, j - 1)
-            edges.add(Edge(current_point, previous_point))
-
-    for j in range(w):
-        for i in range(1, h):
-            current_point: Vertex = Vertex(i, j)
-            previous_point: Vertex = Vertex(i - 1, j)
-            edges.add(Edge(current_point, previous_point))
-
-    component = Component(edges)
-    component.set_weights(image, absolute_intensity)
-    return component
+        for j in range(w):
+            adj_list: List[Tuple[int, int]] = get_adjacent_coords(i, j, image)
+            for adj in adj_list:
+                weight: float = abs(float(image[i][j]) - float(image[adj[0]][adj[1]]))
+                edge = (i * w + j, adj[0] * w + adj[1], weight)
+                if edge not in global_set:
+                    result.append(edge)
+                    global_set.add(edge)
+    return result
 
 
 def runtime_test():
-    image, single = get_test_image()
+    image, single = get_test_image(scale_factor=0.15, channel=0)
     h, w = single.shape
-    logger.info(f"creating component")
+    # utils.show_image(image)
+    utils.show_image(single)
+    edges = get_edges(single)
+    logger.info(f"edges: {len(edges)}")
     start = perf_counter()
-    component = image_to_component(single)
-    end = perf_counter()
-    logger.info(f"created component: {(end - start):.2f} seconds")
-    logger.info(f"component size: {len(component)}")
-    logger.info(f"expected size: {(2*h*w) - (h+w)}")
-    logger.info("constructing mst")
+    edges = sorted(edges, key=lambda x: x[2])
+    logger.info(f"edges sorted: {(perf_counter() - start):.2f} seconds")
     start = perf_counter()
-    component.construct_mst()
-    end = perf_counter()
-    logger.info(f"construct mst: {(end - start):.2f} seconds")
-    logger.info(f"mst size: {len(component.mst)}")
+    s = FHSolver(h, w, 15)
+
+    for edge in edges:
+        s.union(*edge)
+    logger.info(f"fh segmentation: {(perf_counter() - start):.2f} seconds")
+
+    for i in range(h * w):
+        s.find(s.parent[i])
+
+    # for i in range(h):
+    #     for j in range(w):
+    #         print(s.parent[i * w + j], end=" ")
+    #     print()
+
+    for i in range(h):
+        for j in range(w):
+            value = s.parent[i * w + j]
+            new_value = single[value // w][value % w]
+            single[i][j] = new_value
+
+    utils.show_image(single)
+    logger.info(f"number of components: {len(set(s.parent))}")
 
 
 # --------------------------- #
