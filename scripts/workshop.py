@@ -11,7 +11,8 @@ class FHSolver:
         self.uf_matrix: List[List[int]] = [
             [(i * w) + j for j in range(w)] for i in range(h)
         ]
-        self.id_matrix: List[List[int]] = [[0 for _ in range(w)] for _ in range(h)]
+        self.id_matrix: List[List[float]] = [[0 for _ in range(w)] for _ in range(h)]
+        self.rank: List[List[int]] = [[0 for _ in range(w)] for _ in range(h)]
 
     def set_edges(self, edges: List[Tuple[int, int, float]]):
         self.edges: List[Tuple[int, int, float]] = edges
@@ -23,6 +24,30 @@ class FHSolver:
 
         self.uf_matrix[i][j] = self.find(parent // 10, parent % 10)
         return self.uf_matrix[i][j]
+
+    def union(self, point_one: Tuple[int, int], point_two: Tuple[int, int]) -> None:
+        parent_one: int = self.find(point_one[0], point_one[1])
+        parent_two: int = self.find(point_two[0], point_two[1])
+
+        if parent_one == parent_two:
+            return None  # the edge forms a loop, and we don't want to include it
+
+        one: Tuple[int, int] = parent_one // 10, parent_one % 10
+        two: Tuple[int, int] = parent_two // 10, parent_two % 10
+
+        if self.rank[one[0]][one[1]] < self.rank[two[0]][two[1]]:
+            self.uf_matrix[one[0]][one[1]] = parent_two
+        elif self.rank[one[0]][one[1]] > self.rank[two[0]][two[1]]:
+            self.uf_matrix[two[0]][two[1]] = parent_one
+        else:
+            self.uf_matrix[two[0]][two[1]] = parent_one
+            self.rank[two[0]][two[1]] += 1
+
+        max_edge_weight: float = max(
+            self.id_matrix[one[0]][one[1]], self.id_matrix[two[0]][two[1]]
+        )
+        self.id_matrix[one[0]][one[1]] = max_edge_weight
+        self.id_matrix[two[0]][two[1]] = max_edge_weight
 
 
 def main():
