@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Tuple, Callable
 import time
 
-
+"""
 class FHSolver:
 
     def __init__(self, h: int, w: int, k: int):
@@ -14,6 +14,7 @@ class FHSolver:
         self.rank: List[int] = [1 for _ in range(w * h)]
 
     def find(self, x: int) -> int:
+        # find the representative of this point
         if self.parent[x] != x:
             self.parent[x] = self.find(self.parent[x])
         return self.parent[x]
@@ -56,6 +57,7 @@ class FHSolver:
         result += f"Rank: {self.rank}\n"
         result += f"Internal difference: {self.internal_difference}\n"
         return result
+"""
 
 
 def main():
@@ -70,14 +72,14 @@ def main():
         (9, 2, 40),
     ]
     x = sorted(x, key=lambda x: x[2])
-    s = FHSolver(3, 4, 10)
+    # s = FHSolver(3, 4, 10)
     start = time.perf_counter()
 
-    print(s)
-    for edge in x:
-        s.union(*edge)
-    print(s)
-    print(f"Execution time: {(time.perf_counter() - start):.3f} seconds")
+    # print(s)
+    # for edge in x:
+    #     s.union(*edge)
+    # print(s)
+    # print(f"Execution time: {(time.perf_counter() - start):.3f} seconds")
 
 
 if __name__ == "__main__":

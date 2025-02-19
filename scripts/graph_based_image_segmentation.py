@@ -10,9 +10,7 @@ from typing import Dict, Set, Tuple, List, Callable
 from random import choice, randint
 from time import perf_counter
 import heapq
-from workshop import FHSolver
-
-from numpy.ma.core import absolute
+import multiprocessing as mp
 
 # internal modules
 import utils
@@ -24,9 +22,72 @@ import numpy as np
 #   CLASSES     #
 # --------------------------- #
 
+
+class FHSolver:
+
+    def __init__(self, h: int, w: int, k: int):
+        self.h: int = h
+        self.w: int = w
+        self.k: int = k
+        self.parent: List[int] = [i for i in range(w * h)]
+        self.internal_difference: List[float] = [0 for _ in range(w * h)]
+        self.rank: List[int] = [1 for _ in range(w * h)]
+
+    def find(self, x: int) -> int:
+        """find the representative of this point"""
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+
+    def union(self, x: int, y: int, weight: float) -> None:
+        parent_x = self.find(x)
+        parent_y = self.find(y)
+
+        if parent_x == parent_y:
+            return (
+                None  # the edge between x,y forms a loop so we don't want to include it
+            )
+
+        mint_x: float = self.internal_difference[parent_x]
+        mint_y: float = self.internal_difference[parent_y]
+        mint: float = min(
+            mint_x + (self.k / self.rank[parent_x]),
+            mint_y + (self.k / self.rank[parent_y]),
+        )
+        if mint < weight:
+            return None  # the edge doesn't meet the conditions of the FH predicate
+
+        if self.rank[parent_x] < self.rank[parent_y]:
+            self.parent[parent_x] = parent_y
+        elif self.rank[parent_x] > self.rank[parent_y]:
+            self.parent[parent_y] = parent_x
+        else:
+            self.parent[parent_y] = parent_x
+            self.rank[parent_x] += 1
+
+        max_edge_weight: float = max(
+            self.internal_difference[x], self.internal_difference[y], weight
+        )
+        self.internal_difference[x] = max_edge_weight
+        self.internal_difference[y] = max_edge_weight
+
+    def __str__(self):
+        result: str = ""
+        result += f"Parent: {self.parent}\n"
+        result += f"Rank: {self.rank}\n"
+        result += f"Internal difference: {self.internal_difference}\n"
+        return result
+
+
 # --------------------------- #
 #   FUNCTIONS   #
 # --------------------------- #
+
+
+def timeit(start: float, s: str = "") -> float:
+    result = perf_counter() - start
+    logger.info(f"{s} execution time: {result:.3f}")
+    return result
 
 
 # --------------------------- #
@@ -45,7 +106,7 @@ def get_test_image(
     # setup params
     base_path: Path = Path(os.path.dirname(os.path.dirname(__file__)))
     # test_images: list = ["building", "camera", "clothes", "island", "ski"]
-    test_images: list = ["clothes"]
+    test_images: list = ["island"]
     test_image_name: str = choice(test_images)
     test_image_path: Path = base_path / "test_images" / f"{test_image_name}.jpg"
 
@@ -60,73 +121,82 @@ def get_test_image(
     return image, single_channel
 
 
-def get_adjacent_coords(x: int, y: int, image: np.ndarray) -> List[Tuple[int, int]]:
-    # find valid adjacent coords for x,y in image
-    h, w = image.shape
-    result: List[Tuple[int, int]] = []
-
-    for i in range(-1, 2):
-        for j in range(-1, 2):
-
-            x_out_of_bound: bool = not (0 <= (x + i) < h)
-            y_out_of_bound: bool = not (0 <= (y + j) < w)
-            same_element: bool = (i == 0) and (j == 0)
-
-            if x_out_of_bound or y_out_of_bound or same_element:
-                continue
-            else:
-                result.append((x + i, y + j))
-
-    return result
-
-
 def get_edges(image: np.ndarray) -> List[Tuple[int, int, float]]:
     h, w = image.shape
-    global_set = set()
     result = []
 
-    for i in range(h):
-        for j in range(w):
-            adj_list: List[Tuple[int, int]] = get_adjacent_coords(i, j, image)
-            for adj in adj_list:
-                weight: float = abs(float(image[i][j]) - float(image[adj[0]][adj[1]]))
-                edge = (i * w + j, adj[0] * w + adj[1], weight)
-                if edge not in global_set:
-                    result.append(edge)
-                    global_set.add(edge)
+    def form_edge(a: Tuple[int, int], b: Tuple[int, int]) -> Tuple[int, int, float]:
+        return (
+            a[0] * w + a[1],
+            b[0] * w + b[1],
+            abs(float(image[a[0]][a[1]]) - float(image[b[0]][b[1]])),
+        )
+
+    for i in range(h - 1):
+        for j in range(w - 1):
+            current_point: Tuple[int, int] = (i, j)
+            right_point: Tuple[int, int] = (i, j + 1)
+            bottom_point: Tuple[int, int] = (i + 1, j)
+            result.append(form_edge(current_point, right_point))
+            result.append(form_edge(current_point, bottom_point))
+
+    for j in range(w - 1):
+        current_point: Tuple[int, int] = (h - 1, j)
+        right_point: Tuple[int, int] = (h - 1, j + 1)
+        result.append(form_edge(current_point, right_point))
+
+    for i in range(h - 1):
+        current_point: Tuple[int, int] = (i, w - 1)
+        bottom_point: Tuple[int, int] = (i + 1, w - 1)
+        result.append(form_edge(current_point, bottom_point))
+
     return result
 
 
 def runtime_test():
-    image, single = get_test_image(scale_factor=0.15, channel=0)
+    image, single = get_test_image(scale_factor=0.25, channel=0)
     h, w = single.shape
     # utils.show_image(image)
     utils.show_image(single)
+
+    main_start = perf_counter()
+
+    start = perf_counter()
     edges = get_edges(single)
+    timeit(start, "get_edges")
     logger.info(f"edges: {len(edges)}")
+    logger.info(f"expected edges: {(2 * h * w) - (h + w)}")
+
     start = perf_counter()
     edges = sorted(edges, key=lambda x: x[2])
-    logger.info(f"edges sorted: {(perf_counter() - start):.2f} seconds")
-    start = perf_counter()
-    s = FHSolver(h, w, 15)
+    # logger.info(f"edges sorted: {(perf_counter() - start):.2f} seconds")
+    timeit(start, "sorting")
 
+    s = FHSolver(h, w, 4)
+
+    start = perf_counter()
     for edge in edges:
         s.union(*edge)
-    logger.info(f"fh segmentation: {(perf_counter() - start):.2f} seconds")
+    timeit(start, "union / mst")
 
+    start = perf_counter()
     for i in range(h * w):
         s.find(s.parent[i])
+    timeit(start, "resolve parents")
 
     # for i in range(h):
     #     for j in range(w):
     #         print(s.parent[i * w + j], end=" ")
     #     print()
 
+    start = perf_counter()
     for i in range(h):
         for j in range(w):
             value = s.parent[i * w + j]
             new_value = single[value // w][value % w]
             single[i][j] = new_value
+    timeit(start, "recreate image")
+    timeit(main_start, "overall")
 
     utils.show_image(single)
     logger.info(f"number of components: {len(set(s.parent))}")
