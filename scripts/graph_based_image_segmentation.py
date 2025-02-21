@@ -105,20 +105,21 @@ def get_test_image(
 ) -> Tuple[np.ndarray, np.ndarray]:
     # setup params
     base_path: Path = Path(os.path.dirname(os.path.dirname(__file__)))
-    # test_images: list = ["building", "camera", "clothes", "island", "ski"]
-    test_images: list = ["island"]
-    test_image_name: str = choice(test_images)
-    test_image_path: Path = base_path / "test_images" / f"{test_image_name}.jpg"
+    test_images: list = ["building", "camera", "clothes", "island", "ski"]
+    # test_images: list = ["clothes"]
+    # test_image_name: str = choice(test_images)
+    for test_image_name in test_images:
+        test_image_path: Path = base_path / "test_images" / f"{test_image_name}.jpg"
 
-    # operations
-    image = utils.read_image(test_image_path)
-    image = utils.scale_image(image, scale=scale_factor)
-    image = utils.gaussian_blur(image)
+        # operations
+        image = utils.read_image(test_image_path)
+        image = utils.scale_image(image, scale=scale_factor)
+        image = utils.gaussian_blur(image)
 
-    # graph testing
-    single_channel: np.ndarray = np.array(image[:, :, channel])
-    logger.info(f"fetching image: {test_image_name}  img: {image.shape}")
-    return image, single_channel
+        # graph testing
+        single_channel: np.ndarray = np.array(image[:, :, channel])
+        logger.info(f"fetching image: {test_image_name}  img: {image.shape}")
+        yield image, single_channel
 
 
 def get_edges(image: np.ndarray) -> List[Tuple[int, int, float]]:
@@ -153,11 +154,10 @@ def get_edges(image: np.ndarray) -> List[Tuple[int, int, float]]:
     return result
 
 
-def runtime_test():
-    image, single = get_test_image(scale_factor=0.25, channel=0)
+def runtime_test(image, single, k=10):
     h, w = single.shape
     # utils.show_image(image)
-    utils.show_image(single)
+    # utils.show_image(single)
 
     main_start = perf_counter()
 
@@ -172,7 +172,7 @@ def runtime_test():
     # logger.info(f"edges sorted: {(perf_counter() - start):.2f} seconds")
     timeit(start, "sorting")
 
-    s = FHSolver(h, w, 4)
+    s = FHSolver(h, w, k)
 
     start = perf_counter()
     for edge in edges:
@@ -184,21 +184,25 @@ def runtime_test():
         s.find(s.parent[i])
     timeit(start, "resolve parents")
 
-    # for i in range(h):
-    #     for j in range(w):
-    #         print(s.parent[i * w + j], end=" ")
-    #     print()
-
     start = perf_counter()
     for i in range(h):
         for j in range(w):
             value = s.parent[i * w + j]
             new_value = single[value // w][value % w]
             single[i][j] = new_value
-    timeit(start, "recreate image")
+    timeit(start, "create mask")
+
+    start = perf_counter()
+    for i in range(h):
+        for j in range(w):
+            value = utils.GRAYSCALE_TO_RGB_MAP[single[i][j]]
+            image[i][j][0] = value[0]
+            image[i][j][1] = value[1]
+            image[i][j][2] = value[2]
+    timeit(start, "apply mask")
     timeit(main_start, "overall")
 
-    utils.show_image(single)
+    # utils.show_image(image)
     logger.info(f"number of components: {len(set(s.parent))}")
 
 
@@ -219,9 +223,15 @@ if __name__ == "__main__":
     logger.info("setup logger")
 
     # operations
-    start_time = perf_counter()
-    runtime_test()
-    end_time = perf_counter()
 
-    logger.info(f"runtime: {(end_time-start_time):.2f} seconds")
+    for image, single in get_test_image(scale_factor=0.15, channel=0):
+        utils.show_image(image)
+        start_time = perf_counter()
+        runtime_test(image, single, 30)
+        runtime_test(image, np.array(image[:, :, 0]), 20)
+        runtime_test(image, np.array(image[:, :, 0]), 10)
+        end_time = perf_counter()
+        utils.show_image(image)
+
+    # logger.info(f"runtime: {(end_time-start_time):.2f} seconds")
     logger.info("end of test")
