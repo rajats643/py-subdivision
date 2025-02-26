@@ -11,6 +11,7 @@ from random import choice, randint
 from time import perf_counter
 import heapq
 import multiprocessing as mp
+from multiprocessing import shared_memory
 
 # internal modules
 import utils
@@ -104,7 +105,7 @@ def get_test_image(
     # setup params
     base_path: Path = Path(os.path.dirname(os.path.dirname(__file__)))
     test_images: list = ["building", "camera", "clothes", "island", "ski"]
-    # test_images: list = ["building"]
+    # test_images: list = ["camera"]
     # test_image_name: str = choice(test_images)
     for test_image_name in test_images:
         test_image_path: Path = base_path / "test_images" / f"{test_image_name}.jpg"
@@ -112,7 +113,7 @@ def get_test_image(
         # operations
         image = utils.read_image(test_image_path)
         image = utils.scale_image(image, scale=scale_factor)
-        image = utils.gaussian_blur(image)
+        image = utils.gaussian_blur(image, k=7)
 
         # graph testing
         single_channel: np.ndarray = np.array(image[:, :, channel])
@@ -212,8 +213,9 @@ def get_fh_segmentation_mask(
     result.put((channel, result_mask))
 
 
-def run_fh_rgb(image, k_scale=10):
+def run_fh_rgb(image, k_scale=10, return_queue=None, grid_pos=0):
     # start_time = perf_counter()
+    # utils.show_image(image)
     workers: List[mp.Process] = []
     result = mp.Queue()
     for channel in range(3):
@@ -243,6 +245,8 @@ def run_fh_rgb(image, k_scale=10):
     result.close()
     apply_triple_mask(image, masks=masks)
     apply_segment_colors(image)
+    return_queue.put((grid_pos, image))
+    return_queue.close()
     # end_time = perf_counter()
     # logger.info(f" fh_time: {(end_time-start_time):.3f} seconds")
 
@@ -265,12 +269,53 @@ if __name__ == "__main__":
 
     # operations
 
-    scale_line: list = [10_000]
-    for test_image, sc in get_test_image(scale_factor=0.15, channel=0):
-        utils.show_image(test_image)
+    scale_line: list = [1_500_000]
+    result = mp.Queue()
+    for test_image, sc in get_test_image(scale_factor=0.2, channel=0):
+        # utils.show_image(test_image)
+        h, w, c = test_image.shape
+        grid: int = 1
         start_time = perf_counter()
         for scale in scale_line:
-            run_fh_rgb(test_image[:, :, :], k_scale=scale)
+            workers: List[List[mp.Process]] = [
+                [
+                    mp.Process(
+                        target=run_fh_rgb,
+                        args=(
+                            test_image[
+                                i * (h // grid) : (i + 1) * (h // grid),
+                                j * (w // grid) : (j + 1) * (w // grid),
+                                :,
+                            ],
+                            scale,
+                            result,
+                            (i * grid) + j,
+                        ),
+                    )
+                    for j in range(grid)
+                ]
+                for i in range(grid)
+            ]
+
+            for row in workers:
+                for worker in row:
+                    worker.start()
+
+            count = 0
+            while count < grid * grid:
+                position, patch = result.get()
+                i, j = divmod(position, grid)
+                test_image[
+                    i * (h // grid) : (i + 1) * (h // grid),
+                    j * (w // grid) : (j + 1) * (w // grid),
+                    :,
+                ] = patch
+                count += 1
+
+            for row in workers:
+                for worker in row:
+                    worker.join()
+
         end_time = perf_counter()
         logger.info(f" fh_time: {(end_time-start_time):.3f} seconds")
         utils.show_image(test_image)
