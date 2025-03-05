@@ -64,6 +64,16 @@ def gaussian_blur(image: np.ndarray, sigma: float = 0.8, k: int = 3) -> np.ndarr
     return result
 
 
+def median_blur(image: np.ndarray, k: int = 3) -> np.ndarray:
+    logger: logging.Logger = logging.getLogger(__name__)
+    try:
+        result: np.ndarray = cv.medianBlur(src=image, ksize=k)
+        logger.debug(f"applied median blur with ksize: {k}")
+    except (cv.error, Exception) as e:
+        raise RuntimeError("failed to apply median blur") from e
+    return result
+
+
 def show_image(image: np.ndarray, name: str = "image") -> None:
     logger: logging.Logger = logging.getLogger(__name__)
     logger.debug(f"showing image: {name}")

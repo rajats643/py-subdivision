@@ -5,13 +5,11 @@
 # built-in packages
 import os
 import logging.config
+from email.mime import image
 from pathlib import Path
-from typing import Dict, Set, Tuple, List, Callable
-from random import choice, randint
+from typing import Tuple, List
 from time import perf_counter
-import heapq
 import multiprocessing as mp
-from multiprocessing import shared_memory
 
 # internal modules
 import utils
@@ -25,23 +23,43 @@ import numpy as np
 
 
 class FHSolver:
+    """
+    implements the FH segmentation method on an image using the union-find data structure
+    """
 
     def __init__(self, h: int, w: int, k: int):
+        # height, width of image
         self.h: int = h
         self.w: int = w
+
+        # k is factor that determines the degree of segmentation
+        # larger value -> larger segments
         self.k: int = k
+
+        # parents (representatives) of each union
         self.parent: List[int] = [i for i in range(w * h)]
+
+        # max weight in mst
         self.internal_difference: List[float] = [0 for _ in range(w * h)]
+
+        # height of mst
         self.rank: List[int] = [1 for _ in range(w * h)]
+
+        # number of nodes in mst
         self.size: List[int] = [1 for _ in range(w * h)]
 
     def find(self, x: int) -> int:
-        """find the representative of this point"""
+        """
+        find the representative of x
+        """
         if self.parent[x] != x:
             self.parent[x] = self.find(self.parent[x])
         return self.parent[x]
 
     def union(self, x: int, y: int, weight: float) -> None:
+        """
+        combine the sets that x and y belong to, if they belong to different sets, and the weight between them exceeds M_INT
+        """
         parent_x = self.find(x)
         parent_y = self.find(y)
 
@@ -76,23 +94,6 @@ class FHSolver:
         self.internal_difference[x] = max_edge_weight
         self.internal_difference[y] = max_edge_weight
 
-    def __str__(self):
-        result: str = ""
-        result += f"Parent: {self.parent}\n"
-        result += f"Rank: {self.rank}\n"
-        result += f"Internal difference: {self.internal_difference}\n"
-        return result
-
-
-# --------------------------- #
-#   FUNCTIONS   #
-# --------------------------- #
-
-
-# --------------------------- #
-#   WEIGHT FUNCTIONS    #
-# --------------------------- #
-
 
 # --------------------------- #
 #   TEMP FUNCTIONS  #
@@ -113,7 +114,7 @@ def get_test_image(
         # operations
         image = utils.read_image(test_image_path)
         image = utils.scale_image(image, scale=scale_factor)
-        image = utils.gaussian_blur(image, k=7)
+        image = utils.gaussian_blur(image, k=3, sigma=0.8)
 
         # graph testing
         single_channel: np.ndarray = np.array(image[:, :, channel])
@@ -122,6 +123,9 @@ def get_test_image(
 
 
 def get_edges(image: np.ndarray) -> List[Tuple[int, int, float]]:
+    """
+    return a list of edges formed from an image
+    """
     h, w = image.shape
     result: List[Tuple[int, int, float]] = []
 
@@ -153,6 +157,9 @@ def get_edges(image: np.ndarray) -> List[Tuple[int, int, float]]:
 
 
 def apply_mask(image: np.ndarray, mask: np.ndarray) -> None:
+    """
+    overwrite image using a mask to color segments
+    """
     h, w = mask.shape
     for i in range(h):
         for j in range(w):
@@ -160,6 +167,9 @@ def apply_mask(image: np.ndarray, mask: np.ndarray) -> None:
 
 
 def apply_triple_mask(image: np.ndarray, masks: List[np.ndarray]) -> None:
+    """
+    overwrite image by applying RGB masks
+    """
     h, w = masks[0].shape
     for i in range(h):
         for j in range(w):
@@ -169,6 +179,9 @@ def apply_triple_mask(image: np.ndarray, masks: List[np.ndarray]) -> None:
 
 
 def apply_segment_colors(image: np.ndarray) -> None:
+    """
+    overwrite image by converting RGB pixels -> grayscale mapping -> RGB segmentation colors
+    """
     h, w, c = image.shape
     for i in range(h):
         for j in range(w):
@@ -183,6 +196,9 @@ def get_fh_segmentation_mask(
     result=None,
     channel: int = 0,
 ) -> None:
+    """
+    perform FH segmentation algorithm on a single channel image
+    """
 
     # image dimensions
     h, w = single_channel_image.shape
@@ -213,11 +229,11 @@ def get_fh_segmentation_mask(
     result.put((channel, result_mask))
 
 
-def run_fh_rgb(image, k_scale=10, return_queue=None, grid_pos=0):
-    # start_time = perf_counter()
-    # utils.show_image(image)
+def run_fh_rgb(image, k_scale=10):
     workers: List[mp.Process] = []
     result = mp.Queue()
+
+    # get FH segmentation masks for each channel
     for channel in range(3):
         worker: mp.Process = mp.Process(
             target=get_fh_segmentation_mask,
@@ -231,6 +247,7 @@ def run_fh_rgb(image, k_scale=10, return_queue=None, grid_pos=0):
         workers.append(worker)
         worker.start()
 
+    # retrieve results from result Queue
     masks = [0, 0, 0]
     count = 0
     while count < 3:
@@ -245,10 +262,6 @@ def run_fh_rgb(image, k_scale=10, return_queue=None, grid_pos=0):
     result.close()
     apply_triple_mask(image, masks=masks)
     apply_segment_colors(image)
-    return_queue.put((grid_pos, image))
-    return_queue.close()
-    # end_time = perf_counter()
-    # logger.info(f" fh_time: {(end_time-start_time):.3f} seconds")
 
 
 # --------------------------- #
@@ -269,12 +282,13 @@ if __name__ == "__main__":
 
     # operations
 
-    scale_line: list = [1_500_000]
+    scale_line: list = [15_00]
     result = mp.Queue()
-    for test_image, sc in get_test_image(scale_factor=0.2, channel=0):
+    for test_image, sc in get_test_image(scale_factor=0.15, channel=0):
         # utils.show_image(test_image)
         h, w, c = test_image.shape
-        grid: int = 1
+        """
+        grid: int = 2
         start_time = perf_counter()
         for scale in scale_line:
             workers: List[List[mp.Process]] = [
@@ -315,8 +329,14 @@ if __name__ == "__main__":
             for row in workers:
                 for worker in row:
                     worker.join()
+        """
+
+        start_time = perf_counter()
+        for scale in scale_line:
+            run_fh_rgb(test_image, k_scale=scale)
 
         end_time = perf_counter()
+        test_image = utils.median_blur(test_image, k=5)
         logger.info(f" fh_time: {(end_time-start_time):.3f} seconds")
         utils.show_image(test_image)
 
