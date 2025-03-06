@@ -6,7 +6,7 @@ from pathlib import Path
 class TestGraphBasedImageSegmentation:
 
     def setup(self):
-        path: Path = Path("../test_images/clothes.jpg")
+        path: Path = Path("../test_directory/test_images/clothes.jpg")
         self.image = utils.read_image(path)
 
     def test_something(self):
