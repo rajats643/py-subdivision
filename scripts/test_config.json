@@ -1,0 +1,29 @@
+{
+  "data": {
+    "image_path": "C:\\Users\\rajat\\Desktop\\projects\\py-subdivision\\test_directory\\island.jpg",
+    "directory_path": "C:\\Users\\rajat\\Desktop\\projects\\py-subdivision\\test_directory\\test_images"
+  },
+  "output_path": "C:\\Users\\rajat\\Desktop\\projects\\py-subdivision\\test_directory\\output",
+  "workflow": {
+    "sequence": 4,
+    "blocks": {
+      "0": {
+        "operation": "Scale",
+        "scale_factor": 0.1
+      },
+      "1": {
+        "operation": "Gaussian",
+        "kernel_size": 3,
+        "sigma": 0.8
+      },
+      "2": {
+        "operation": "FH",
+        "k_factor": 150000
+      },
+      "3": {
+        "operation": "Median",
+        "kernel_size": 3
+      }
+    }
+  }
+}

@@ -4,8 +4,6 @@
 
 # built-in packages
 import os
-import logging.config
-from email.mime import image
 from pathlib import Path
 from typing import Tuple, List
 from time import perf_counter
@@ -13,6 +11,7 @@ import multiprocessing as mp
 
 # internal modules
 import utils
+import constants
 
 # external modules
 import numpy as np
@@ -95,31 +94,9 @@ class FHSolver:
         self.internal_difference[y] = max_edge_weight
 
 
-# --------------------------- #
-#   TEMP FUNCTIONS  #
-# --------------------------- #
-
-
-def get_test_image(
-    scale_factor: float = 0.1, channel: int = 0
-) -> Tuple[np.ndarray, np.ndarray]:
-    # setup params
-    base_path: Path = Path(os.path.dirname(os.path.dirname(__file__)))
-    test_images: list = ["building", "camera", "clothes", "island", "ski"]
-    # test_images: list = ["camera"]
-    # test_image_name: str = choice(test_images)
-    for test_image_name in test_images:
-        test_image_path: Path = base_path / "test_images" / f"{test_image_name}.jpg"
-
-        # operations
-        image = utils.read_image(test_image_path)
-        image = utils.scale_image(image, scale=scale_factor)
-        image = utils.gaussian_blur(image, k=3, sigma=0.8)
-
-        # graph testing
-        single_channel: np.ndarray = np.array(image[:, :, channel])
-        logger.info(f"fetching image: {test_image_name}  img: {image.shape}")
-        yield image, single_channel
+# ---------------------- #
+#  FUNCTIONS
+# ---------------------- #
 
 
 def get_edges(image: np.ndarray) -> List[Tuple[int, int, float]]:
@@ -156,16 +133,6 @@ def get_edges(image: np.ndarray) -> List[Tuple[int, int, float]]:
     return result
 
 
-def apply_mask(image: np.ndarray, mask: np.ndarray) -> None:
-    """
-    overwrite image using a mask to color segments
-    """
-    h, w = mask.shape
-    for i in range(h):
-        for j in range(w):
-            image[i][j] = utils.GRAYSCALE_TO_RGB_MAP[mask[i][j]]
-
-
 def apply_triple_mask(image: np.ndarray, masks: List[np.ndarray]) -> None:
     """
     overwrite image by applying RGB masks
@@ -187,7 +154,7 @@ def apply_segment_colors(image: np.ndarray) -> None:
         for j in range(w):
             r, g, b = image[i][j]
             value = int((0.299 * r) + (0.587 * g) + (0.114 * b))
-            image[i][j] = utils.GRAYSCALE_TO_RGB_MAP[value]
+            image[i][j] = constants.GRAYSCALE_TO_RGB_MAP[value]
 
 
 def get_fh_segmentation_mask(
@@ -229,7 +196,7 @@ def get_fh_segmentation_mask(
     result.put((channel, result_mask))
 
 
-def run_fh_rgb(image, k_scale=10):
+def run_fh_rgb(image, k_factor=10):
     workers: List[mp.Process] = []
     result = mp.Queue()
 
@@ -239,7 +206,7 @@ def run_fh_rgb(image, k_scale=10):
             target=get_fh_segmentation_mask,
             args=(
                 image[:, :, channel],
-                k_scale,
+                k_factor,
                 result,
                 channel,
             ),
@@ -267,78 +234,11 @@ def run_fh_rgb(image, k_scale=10):
 # --------------------------- #
 #   MAIN    #
 # --------------------------- #
+# TODO: turn this into a usable app (CLI or GUI) and deploy in some form
 
 if __name__ == "__main__":
     """
     graph based segmentation - testing only
     notes:
     """
-    verbose = True
-
-    # setup logging
-    utils.setup_logging(debug_filename=Path("./graph.log"), verbose=verbose)
-    logger: logging.Logger = logging.getLogger(__name__)
-    logger.info("setup logger")
-
-    # operations
-
-    scale_line: list = [15_00]
-    result = mp.Queue()
-    for test_image, sc in get_test_image(scale_factor=0.15, channel=0):
-        # utils.show_image(test_image)
-        h, w, c = test_image.shape
-        """
-        grid: int = 2
-        start_time = perf_counter()
-        for scale in scale_line:
-            workers: List[List[mp.Process]] = [
-                [
-                    mp.Process(
-                        target=run_fh_rgb,
-                        args=(
-                            test_image[
-                                i * (h // grid) : (i + 1) * (h // grid),
-                                j * (w // grid) : (j + 1) * (w // grid),
-                                :,
-                            ],
-                            scale,
-                            result,
-                            (i * grid) + j,
-                        ),
-                    )
-                    for j in range(grid)
-                ]
-                for i in range(grid)
-            ]
-
-            for row in workers:
-                for worker in row:
-                    worker.start()
-
-            count = 0
-            while count < grid * grid:
-                position, patch = result.get()
-                i, j = divmod(position, grid)
-                test_image[
-                    i * (h // grid) : (i + 1) * (h // grid),
-                    j * (w // grid) : (j + 1) * (w // grid),
-                    :,
-                ] = patch
-                count += 1
-
-            for row in workers:
-                for worker in row:
-                    worker.join()
-        """
-
-        start_time = perf_counter()
-        for scale in scale_line:
-            run_fh_rgb(test_image, k_scale=scale)
-
-        end_time = perf_counter()
-        test_image = utils.median_blur(test_image, k=5)
-        logger.info(f" fh_time: {(end_time-start_time):.3f} seconds")
-        utils.show_image(test_image)
-
-    # logger.info(f"runtime: {(end_time-start_time):.2f} seconds")
-    logger.info("end of test")
+    print("runs FH segmentation")
