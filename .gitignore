@@ -2,3 +2,5 @@
 .idea/*
 *.xml
 *.log
+./test*
+./test*/*
